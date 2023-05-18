@@ -1,0 +1,67 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
+
+name: Create Matter server and publish a Docker image
+
+on:
+  # Allows manually triggering
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  REMOTE_REPO: home-assistant-libs/python-matter-server
+  IMAGE_NAME: ${{ github.actor }}/matter-server
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Get latest release name
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: ${{ env.REMOTE_REPO }}
+          releases-only: true                       # Only get tags that have a release too
+        id: getRelease
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.REMOTE_REPO }}
+          ref: ${{ steps.getRelease.outputs.tag }}
+          # ref: ${{ env.REMOTE_TAG }}
+
+      - name: Build Image
+        run: docker compose build --no-cache
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+  
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+  
+      - name: Build and push Docker image
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          file: Dockerfile.dev
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.getRelease.outputs.tag }}
+          # tags: ${{ steps.meta.outputs.tags }}
+          # labels: ${{ steps.meta.outputs.labels }}
